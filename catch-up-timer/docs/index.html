@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f4f8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#111219" media="(prefers-color-scheme: dark)">
+<meta name="description" content="Remember to call or hang out with the people in your life.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<!-- APP HEAD START -->
+<title>Catch-Up Timer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one thumb-width column of person cards sorted by urgency, sticky summary header, bottom sheets for editing */
+:root {
+  --bg: #f4f4f8; --surface: #ffffff; --surface-2: #ebebf2; --fg: #1a1b24; --muted: #5d6072; --line: #d9dae4;
+  --accent: #3540a0; --accent-fg: #ffffff;
+  --ok: #23803a; --ok-bg: #e2f3e6;
+  --soon: #a86a00; --soon-bg: #fcefd2;
+  --over: #c42b2b; --over-bg: #fbe3e3;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --radius: 18px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111219; --surface: #1a1c26; --surface-2: #252836; --fg: #e9eaf2; --muted: #9a9db2; --line: #2e3142;
+    --accent: #a7b1ff; --accent-fg: #12142a;
+    --ok: #5fcf7e; --ok-bg: #16301f;
+    --soon: #f2b84b; --soon-bg: #382a10;
+    --over: #ff7070; --over-bg: #3c1718;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111219; --surface: #1a1c26; --surface-2: #252836; --fg: #e9eaf2; --muted: #9a9db2; --line: #2e3142;
+  --accent: #a7b1ff; --accent-fg: #12142a;
+  --ok: #5fcf7e; --ok-bg: #16301f;
+  --soon: #f2b84b; --soon-bg: #382a10;
+  --over: #ff7070; --over-bg: #3c1718;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); font-size: 16px; line-height: 1.4;
+  -webkit-tap-highlight-color: transparent; overflow-x: hidden;
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.wrap {
+  max-width: 560px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); }
+header.top .wrap { display: flex; align-items: center; gap: 12px; padding-block: 14px 10px; }
+.brand { flex: 1; min-width: 0; }
+.brand h1 { margin: 0; font-size: 1.45rem; letter-spacing: -0.02em; font-weight: 800; }
+.summary { margin: 2px 0 0; color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.summary b { font-weight: 700; }
+.summary .s-over { color: var(--over); }
+.summary .s-soon { color: var(--soon); }
+.icon-btn {
+  flex: none; width: 48px; height: 48px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface);
+  display: grid; place-items: center;
+}
+.icon-btn svg { width: 22px; height: 22px; }
+
+main .wrap { display: flex; flex-direction: column; gap: 12px; padding-block: 6px 120px; }
+
+.banner {
+  display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap;
+  background: var(--surface-2); border-radius: 14px; padding: 12px 14px; font-size: 0.92rem;
+}
+.banner p { margin: 0; flex: 1 1 200px; color: var(--muted); }
+.link-btn { border: 0; background: none; color: var(--accent); font-weight: 700; padding: 8px 4px; min-height: 44px; }
+
+.card {
+  position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  transition: transform .12s ease, border-color .2s;
+}
+.card.lvl-over { border-color: color-mix(in srgb, var(--over) 55%, var(--line)); }
+.card:has(.card-main:active) { transform: scale(0.985); }
+.card-main {
+  display: flex; flex-direction: column; gap: 8px; width: 100%; text-align: left;
+  border: 0; background: none; padding: 16px 64px 16px 16px; border-radius: var(--radius); min-height: 112px;
+}
+.row1 { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.name { font-size: 1.15rem; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.chip {
+  flex: none; font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em;
+  padding: 3px 8px; border-radius: 999px;
+}
+.big { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.bar { height: 6px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.bar span { display: block; height: 100%; border-radius: inherit; }
+.meta { color: var(--muted); font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+.note { font-size: 0.92rem; background: var(--surface-2); border-radius: 10px; padding: 6px 10px; overflow-wrap: anywhere; }
+.hint { font-size: 0.8rem; color: var(--muted); }
+.lvl-ok .chip { background: var(--ok-bg); color: var(--ok); } .lvl-ok .bar span { background: var(--ok); } .lvl-ok .big { color: var(--ok); }
+.lvl-soon .chip { background: var(--soon-bg); color: var(--soon); } .lvl-soon .bar span { background: var(--soon); } .lvl-soon .big { color: var(--soon); }
+.lvl-over .chip { background: var(--over-bg); color: var(--over); } .lvl-over .bar span { background: var(--over); } .lvl-over .big { color: var(--over); }
+.card .edit {
+  position: absolute; top: 8px; right: 8px; width: 48px; height: 48px; border-radius: 12px;
+  border: 0; background: transparent; color: var(--muted); display: grid; place-items: center;
+}
+.card .edit svg { width: 22px; height: 22px; }
+.card.flash { animation: flash .6s ease; }
+@keyframes flash { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+
+.empty { text-align: center; padding: 48px 8px; color: var(--muted); display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.empty h2 { margin: 0; color: var(--fg); font-size: 1.2rem; }
+.empty p { margin: 0; max-width: 32ch; }
+
+.fab {
+  position: fixed; z-index: 6; left: 50%; transform: translateX(-50%);
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 8px; height: 58px; padding: 0 26px; border-radius: 999px; border: 0;
+  background: var(--accent); color: var(--accent-fg); font-weight: 800; font-size: 1.05rem;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.25);
+}
+.fab svg { width: 22px; height: 22px; }
+
+.toast {
+  position: fixed; z-index: 20; left: 50%; transform: translateX(-50%);
+  bottom: calc(90px + env(safe-area-inset-bottom, 0px)); width: min(520px, calc(100% - 32px));
+  display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; border-radius: 14px;
+  background: var(--fg); color: var(--bg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.3);
+}
+.toast span { flex: 1; min-width: 0; }
+.toast button { border: 0; background: none; color: inherit; font-weight: 800; text-decoration: underline; min-height: 44px; padding: 0 10px; }
+
+dialog {
+  border: 0; padding: 0; background: var(--surface); color: var(--fg);
+  width: 100%; max-width: 560px; max-height: 92dvh; margin: auto auto 0; border-radius: 22px 22px 0 0;
+}
+@media (min-width: 600px) { dialog { margin: auto; border-radius: 22px; } }
+dialog::backdrop { background: rgb(0 0 0 / 0.5); }
+.sheet {
+  display: flex; flex-direction: column; gap: 16px;
+  padding: 20px max(18px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px));
+}
+.sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sheet-head h2 { margin: 0; font-size: 1.25rem; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field > label, .field > .lbl { font-weight: 700; font-size: 0.9rem; }
+.field small { color: var(--muted); }
+input[type="text"], input[type="number"], input[type="date"], textarea {
+  width: 100%; min-height: 50px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg);
+}
+textarea { min-height: 84px; resize: vertical; }
+textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font-size: 0.78rem; min-height: 140px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button {
+  min-height: 44px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); font-weight: 600;
+}
+.chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn {
+  min-height: 52px; padding: 0 18px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface-2); font-weight: 700;
+}
+.btn.primary { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.danger { background: transparent; color: var(--over); border-color: color-mix(in srgb, var(--over) 50%, var(--line)); }
+.btn.danger.armed { background: var(--over); color: #fff; border-color: var(--over); }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions .btn { flex: 1 1 140px; }
+.history { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 0.92rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.history li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.divider { height: 1px; background: var(--line); }
+.err { color: var(--over); font-size: 0.9rem; margin: 0; }
+.ok-msg { color: var(--ok); font-size: 0.9rem; margin: 0; }
+.file-label { display: inline-flex; align-items: center; justify-content: center; }
+.file-label input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+<!-- APP HEAD END -->
+</head>
+<body>
+<!-- APP BODY START -->
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Catch-Up Timer</h1>
+      <p class="summary" id="summary" aria-live="polite"></p>
+    </div>
+    <button class="icon-btn" id="backupBtn" aria-label="Back up or restore">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div class="wrap" id="list"></div>
+</main>
+
+<button class="fab" id="addBtn">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  Add person
+</button>
+
+<div class="toast" id="toast" role="status" hidden><span id="toastMsg"></span><button id="toastUndo" type="button">Undo</button></div>
+
+<dialog id="personDlg" aria-labelledby="personTitle">
+  <form class="sheet" id="personForm" novalidate>
+    <div class="sheet-head">
+      <h2 id="personTitle">Add person</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="field">
+      <label for="fName">Name</label>
+      <input type="text" id="fName" maxlength="60" autocomplete="off" autocapitalize="words" required>
+    </div>
+    <div class="field">
+      <span class="lbl" id="intLbl">Catch up every</span>
+      <div class="chips" id="intChips" role="group" aria-labelledby="intLbl">
+        <button type="button" data-days="7">Week</button>
+        <button type="button" data-days="14">2 weeks</button>
+        <button type="button" data-days="30">Month</button>
+        <button type="button" data-days="90">3 months</button>
+      </div>
+      <label for="fInterval"><small>Or a custom number of days</small></label>
+      <input type="number" id="fInterval" min="1" max="3650" step="1" inputmode="numeric" required>
+    </div>
+    <div class="field">
+      <label for="fLast">Last caught up</label>
+      <div class="chips" id="lastChips">
+        <button type="button" data-ago="0">Today</button>
+        <button type="button" data-ago="1">Yesterday</button>
+        <button type="button" data-ago="7">A week ago</button>
+        <button type="button" data-ago="due">Make due now</button>
+      </div>
+      <input type="date" id="fLast" required>
+      <small id="lastHelp">Changing this date logs a catch-up on that day.</small>
+    </div>
+    <div class="field">
+      <label for="fNote">Note <small>(optional)</small></label>
+      <textarea id="fNote" maxlength="200" placeholder="Ask about the new job"></textarea>
+    </div>
+    <p class="err" id="formErr" hidden></p>
+    <div class="actions">
+      <button type="submit" class="btn primary" id="saveBtn">Save</button>
+    </div>
+    <div id="historyBlock" class="field" hidden>
+      <span class="lbl">Recent catch-ups</span>
+      <ul class="history" id="historyList"></ul>
+    </div>
+    <div class="actions" id="deleteRow" hidden>
+      <button type="button" class="btn danger" id="deleteBtn">Delete person</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="backupDlg" aria-labelledby="backupTitle">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h2 id="backupTitle">Back up &amp; restore</h2>
+      <button type="button" class="icon-btn" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="field">
+      <span class="lbl">Export</span>
+      <div class="actions">
+        <button type="button" class="btn primary" id="downloadBtn">Download .json</button>
+        <button type="button" class="btn" id="shareBtn" hidden>Share file</button>
+        <button type="button" class="btn" id="copyBtn">Copy text</button>
+      </div>
+      <label for="exportText"><small>If the download does nothing, copy this text and save it somewhere safe.</small></label>
+      <textarea id="exportText" class="mono" readonly></textarea>
+      <p class="ok-msg" id="exportMsg" hidden></p>
+    </div>
+    <div class="divider"></div>
+    <div class="field">
+      <span class="lbl">Import</span>
+      <label class="btn file-label" for="importFile">Choose backup file<input type="file" id="importFile" accept=".json,application/json,text/plain"></label>
+      <label for="importText"><small>Or paste backup text here</small></label>
+      <textarea id="importText" class="mono" placeholder='{"format":"catch-up-timer","version":1,"people":[...]}'></textarea>
+      <p class="err" id="importErr" hidden></p>
+      <p class="ok-msg" id="importMsg" hidden></p>
+      <div class="actions">
+        <button type="button" class="btn" id="mergeBtn">Merge with current</button>
+        <button type="button" class="btn danger" id="replaceBtn">Replace all</button>
+      </div>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  'use strict';
+  const STORAGE_KEY = 'catchup.v1';
+  const FORMAT = 'catch-up-timer';
+  const VERSION = 1;
+  const HISTORY_MAX = 30;
+  const DAY = 86400000;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- Dates ----------
+  // A "day number" counts calendar days in the phone's local time zone.
+  // Date.UTC on the local y/m/d gives whole days, so DST 23h/25h days never cause off-by-one errors.
+  const dayNum = (ms) => { const d = new Date(ms); return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / DAY); };
+  const toDateInput = (ms) => { const d = new Date(ms); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const fromDateInput = (s) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); if (!m) return null;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], 12, 0, 0, 0); // local noon: safely inside the day
+    if (isNaN(d)) return null;
+    return dayNum(d.getTime()) === dayNum(Date.now()) ? Date.now() : d.getTime();
+  };
+  const daysAgoMs = (n) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - n); return d.getTime(); };
+  const fmtDate = (ms) => {
+    const d = new Date(ms), sameYear = d.getFullYear() === new Date().getFullYear();
+    return d.toLocaleDateString(undefined, sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const intervalLabel = (n) => ({ 1: 'every day', 7: 'every week', 14: 'every 2 weeks', 30: 'every month', 90: 'every 3 months' }[n] || `every ${n} days`);
+
+  function statusOf(p, now) {
+    const elapsed = Math.max(0, dayNum(now) - dayNum(p.lastCaughtUp));
+    const left = p.intervalDays - elapsed;
+    const soonWindow = Math.max(1, Math.min(7, Math.round(p.intervalDays * 0.2)));
+    const level = left < 0 ? 'over' : left <= soonWindow ? 'soon' : 'ok';
+    return { elapsed, left, level, progress: Math.min(1, elapsed / p.intervalDays) };
+  }
+
+  // ---------- Storage ----------
+  let people = [];
+  let storageOk = true;
+  const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
+
+  function toMs(v) {
+    if (typeof v === 'number' && isFinite(v)) return v;
+    if (typeof v === 'string' && v.trim()) { const t = Date.parse(v); return isNaN(t) ? null : t; }
+    return null;
+  }
+  function cleanPerson(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const name = String(raw.name ?? '').trim().slice(0, 60);
+    const intervalDays = Math.round(Number(raw.intervalDays));
+    const last = toMs(raw.lastCaughtUp);
+    if (!name || !(intervalDays >= 1 && intervalDays <= 3650) || last == null) return null;
+    const history = (Array.isArray(raw.history) ? raw.history : []).map(toMs).filter((x) => x != null);
+    if (!history.includes(last)) history.push(last);
+    history.sort((a, b) => b - a);
+    const p = {
+      id: typeof raw.id === 'string' && raw.id ? raw.id : uid(),
+      name, intervalDays, lastCaughtUp: last,
+      note: String(raw.note ?? '').slice(0, 200),
+      history: [...new Set(history)].slice(0, HISTORY_MAX),
+      createdAt: toMs(raw.createdAt) ?? last,
+    };
+    if (raw.example === true) p.example = true;
+    return p;
+  }
+  function parseBackup(text) {
+    const data = JSON.parse(text);
+    const list = Array.isArray(data) ? data : data && Array.isArray(data.people) ? data.people : null;
+    if (!list) throw new Error('No "people" list found in that file.');
+    const out = list.map(cleanPerson).filter(Boolean);
+    return { people: out, skipped: list.length - out.length };
+  }
+  function load() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw == null) return null;
+      return parseBackup(raw).people;
+    } catch (e) { storageOk = false; return []; }
+  }
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(exportObject())); storageOk = true; }
+    catch (e) { storageOk = false; showToast('Could not save. This browser is blocking storage.'); }
+  }
+  function exportObject() {
+    return {
+      format: FORMAT, version: VERSION, exportedAt: new Date().toISOString(),
+      people: people.map(({ id, name, intervalDays, note, lastCaughtUp, history, createdAt, example }) =>
+        Object.assign({ id, name, intervalDays, note, lastCaughtUp, history, createdAt }, example ? { example: true } : {})),
+    };
+  }
+  function examplePeople() {
+    const mk = (name, intervalDays, ago, note) => ({ id: uid(), name, intervalDays, note, lastCaughtUp: daysAgoMs(ago), history: [daysAgoMs(ago)], createdAt: Date.now(), example: true });
+    return [
+      mk('Mam', 7, 9, 'Ask how the garden is doing'),
+      mk('Aoife', 14, 12, ''),
+      mk('Dave', 30, 6, 'Ask about his new job'),
+    ];
+  }
+
+  // ---------- Rendering ----------
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>';
+  let renderedDay = dayNum(Date.now());
+
+  function render() {
+    const now = Date.now();
+    renderedDay = dayNum(now);
+    const rows = people.map((p) => ({ p, s: statusOf(p, now) }))
+      .sort((a, b) => a.s.left - b.s.left || a.p.name.localeCompare(b.p.name));
+    const list = $('list');
+    const over = rows.filter((r) => r.s.level === 'over').length;
+    const soon = rows.filter((r) => r.s.level === 'soon').length;
+
+    $('summary').innerHTML = !rows.length ? 'Nobody added yet'
+      : (over || soon)
+        ? [over && `<b class="s-over">${over} overdue</b>`, soon && `<b class="s-soon">${soon} due soon</b>`].filter(Boolean).join(' · ') + ` · ${plural(rows.length, 'person').replace('persons', 'people')}`
+        : `All caught up · ${plural(rows.length, 'person').replace('persons', 'people')}`;
+
+    let html = '';
+    if (!storageOk) html += `<div class="banner"><p>This browser is blocking storage, so changes will be lost when you close the page. Use Back up to keep a copy.</p></div>`;
+    if (people.some((p) => p.example)) html += `<div class="banner"><p>These are example people so you can see how it works.</p><button class="link-btn" data-act="clear-examples">Remove examples</button></div>`;
+
+    if (!rows.length) {
+      html += `<div class="empty"><h2>Who do you want to keep in touch with?</h2><p>Add someone, pick how often you want to catch up, and tap their card each time you do.</p></div>`;
+    }
+    for (const { p, s } of rows) {
+      const big = s.left < 0 ? `${plural(-s.left, 'day')} overdue` : s.left === 0 ? 'Due today' : `Due in ${plural(s.left, 'day')}`;
+      const chip = { over: 'Overdue', soon: s.left === 0 ? 'Today' : 'Soon', ok: 'Fine' }[s.level];
+      const ago = s.elapsed === 0 ? 'today' : s.elapsed === 1 ? 'yesterday' : `${s.elapsed} days ago (${fmtDate(p.lastCaughtUp)})`;
+      html += `<article class="card lvl-${s.level}" data-id="${esc(p.id)}">
+        <button class="card-main" data-act="caught" aria-label="Mark caught up with ${esc(p.name)} now">
+          <span class="row1"><span class="name">${esc(p.name)}</span><span class="chip">${chip}</span></span>
+          <span class="big">${big}</span>
+          <span class="bar" aria-hidden="true"><span style="width:${Math.max(4, Math.round(s.progress * 100))}%"></span></span>
+          <span class="meta">Last caught up ${ago} · ${intervalLabel(p.intervalDays)}</span>
+          ${p.note ? `<span class="note">${esc(p.note)}</span>` : ''}
+          ${s.elapsed === 0 ? '' : `<span class="hint">Tap the card when you catch up</span>`}
+        </button>
+        <button class="edit" data-act="edit" aria-label="Edit ${esc(p.name)}">${EDIT_SVG}</button>
+      </article>`;
+    }
+    list.innerHTML = html;
+
+    try { if ('setAppBadge' in navigator) over ? navigator.setAppBadge(over) : navigator.clearAppBadge(); } catch (e) {}
+  }
+
+  // ---------- Toast with undo ----------
+  let toastTimer = null, undoFn = null;
+  function showToast(msg, undo) {
+    $('toastMsg').textContent = msg;
+    undoFn = undo || null;
+    $('toastUndo').hidden = !undo;
+    $('toast').hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(hideToast, undo ? 7000 : 3500);
+  }
+  function hideToast() { $('toast').hidden = true; undoFn = null; }
+  $('toastUndo').addEventListener('click', () => { if (undoFn) undoFn(); hideToast(); });
+
+  // ---------- Actions ----------
+  const find = (id) => people.find((p) => p.id === id);
+  function markCaught(id) {
+    const p = find(id); if (!p) return;
+    const before = JSON.parse(JSON.stringify(p));
+    const now = Date.now();
+    p.lastCaughtUp = now;
+    // One entry per calendar day keeps history meaningful if you tap twice.
+    p.history = [now, ...p.history.filter((t) => dayNum(t) !== dayNum(now))].slice(0, HISTORY_MAX);
+    save(); render();
+    const card = document.querySelector(`.card[data-id="${CSS.escape(id)}"]`);
+    if (card) card.classList.add('flash');
+    try { navigator.vibrate && navigator.vibrate(20); } catch (e) {}
+    showToast(`Caught up with ${p.name}`, () => {
+      const i = people.findIndex((x) => x.id === id);
+      if (i >= 0) { people[i] = before; save(); render(); }
+    });
+  }
+
+  $('list').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]'); if (!btn) return;
+    const act = btn.dataset.act;
+    if (act === 'clear-examples') {
+      const removed = people.filter((p) => p.example);
+      people = people.filter((p) => !p.example); save(); render();
+      showToast('Examples removed', () => { people = people.concat(removed); save(); render(); });
+      return;
+    }
+    const id = btn.closest('.card')?.dataset.id;
+    if (act === 'caught') markCaught(id);
+    if (act === 'edit') openPerson(id);
+  });
+
+  // ---------- Person sheet ----------
+  const dlg = $('personDlg');
+  let editingId = null, deleteArmed = false, deleteTimer = null;
+
+  function syncChips() {
+    const v = Number($('fInterval').value);
+    for (const b of $('intChips').querySelectorAll('button')) b.setAttribute('aria-pressed', String(Number(b.dataset.days) === v));
+  }
+  $('intChips').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-days]'); if (!b) return;
+    $('fInterval').value = b.dataset.days; syncChips();
+  });
+  $('fInterval').addEventListener('input', syncChips);
+  $('lastChips').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-ago]'); if (!b) return;
+    const iv = Math.max(1, Math.round(Number($('fInterval').value)) || 14);
+    const ago = b.dataset.ago === 'due' ? iv : Number(b.dataset.ago);
+    $('fLast').value = toDateInput(daysAgoMs(ago));
+  });
+
+  function setDeleteArmed(on) {
+    deleteArmed = on; clearTimeout(deleteTimer);
+    $('deleteBtn').classList.toggle('armed', on);
+    $('deleteBtn').textContent = on ? 'Tap again to delete' : 'Delete person';
+    if (on) deleteTimer = setTimeout(() => setDeleteArmed(false), 4000);
+  }
+
+  function openPerson(id) {
+    editingId = id || null;
+    const p = id ? find(id) : null;
+    $('personTitle').textContent = p ? `Edit ${p.name}` : 'Add person';
+    $('fName').value = p ? p.name : '';
+    $('fInterval').value = p ? p.intervalDays : 14;
+    $('fLast').value = toDateInput(p ? p.lastCaughtUp : Date.now());
+    $('fLast').max = toDateInput(Date.now());
+    $('fNote').value = p ? p.note : '';
+    $('lastHelp').hidden = !p;
+    $('formErr').hidden = true;
+    $('saveBtn').textContent = p ? 'Save changes' : 'Add person';
+    $('deleteRow').hidden = !p;
+    setDeleteArmed(false);
+    $('historyBlock').hidden = !p;
+    if (p) {
+      $('historyList').innerHTML = p.history.map((t, i) => {
+        const gap = p.history[i + 1] != null ? `${dayNum(t) - dayNum(p.history[i + 1])}d gap` : '';
+        return `<li><span>${esc(new Date(t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }))}</span><span>${gap}</span></li>`;
+      }).join('');
+    }
+    syncChips();
+    dlg.showModal();
+    if (!p) setTimeout(() => $('fName').focus(), 50);
+  }
+
+  $('personForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const name = $('fName').value.trim();
+    const iv = Math.round(Number($('fInterval').value));
+    let last = fromDateInput($('fLast').value);
+    const err = (m) => { $('formErr').textContent = m; $('formErr').hidden = false; };
+    if (!name) return err('Enter a name.');
+    if (!(iv >= 1 && iv <= 3650)) return err('Pick how often, between 1 and 3650 days.');
+    if (last == null) return err('Pick the date you last caught up.');
+    if (last > Date.now()) last = Date.now();
+    const note = $('fNote').value.trim().slice(0, 200);
+
+    if (editingId) {
+      const p = find(editingId);
+      p.name = name; p.intervalDays = iv; p.note = note;
+      if (dayNum(last) !== dayNum(p.lastCaughtUp)) {
+        p.lastCaughtUp = last;
+        p.history = [last, ...p.history.filter((t) => dayNum(t) !== dayNum(last))].sort((a, b) => b - a).slice(0, HISTORY_MAX);
+      }
+      delete p.example;
+    } else {
+      people.push({ id: uid(), name, intervalDays: iv, note, lastCaughtUp: last, history: [last], createdAt: Date.now() });
+    }
+    save(); render(); dlg.close();
+    showToast(editingId ? 'Saved' : `Added ${name}`);
+  });
+
+  $('deleteBtn').addEventListener('click', () => {
+    if (!deleteArmed) return setDeleteArmed(true);
+    const i = people.findIndex((p) => p.id === editingId);
+    if (i < 0) return;
+    const [removed] = people.splice(i, 1);
+    save(); render(); dlg.close();
+    showToast(`Deleted ${removed.name}`, () => { people.splice(Math.min(i, people.length), 0, removed); save(); render(); });
+  });
+
+  // ---------- Backup sheet ----------
+  const bdlg = $('backupDlg');
+  let replaceArmed = false, replaceTimer = null;
+  const backupName = () => `catch-up-backup-${toDateInput(Date.now())}.json`;
+  const backupText = () => JSON.stringify(exportObject(), null, 2);
+
+  function flash(id, msg) { const el = $(id); el.textContent = msg; el.hidden = false; }
+  function setReplaceArmed(on) {
+    replaceArmed = on; clearTimeout(replaceTimer);
+    $('replaceBtn').classList.toggle('armed', on);
+    $('replaceBtn').textContent = on ? `Tap again to replace ${plural(people.length, 'person').replace('persons', 'people')}` : 'Replace all';
+    if (on) replaceTimer = setTimeout(() => setReplaceArmed(false), 4000);
+  }
+
+  $('backupBtn').addEventListener('click', () => {
+    $('exportText').value = backupText();
+    for (const id of ['exportMsg', 'importErr', 'importMsg']) $(id).hidden = true;
+    $('importText').value = ''; $('importFile').value = '';
+    setReplaceArmed(false);
+    try {
+      const f = new File(['{}'], 'x.json', { type: 'application/json' });
+      $('shareBtn').hidden = !(navigator.canShare && navigator.canShare({ files: [f] }));
+    } catch (e) { $('shareBtn').hidden = true; }
+    bdlg.showModal();
+  });
+
+  $('downloadBtn').addEventListener('click', () => {
+    try {
+      const url = URL.createObjectURL(new Blob([backupText()], { type: 'application/json' }));
+      const a = document.createElement('a'); a.href = url; a.download = backupName();
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      flash('exportMsg', `Saving ${backupName()}. Check your Downloads.`);
+    } catch (e) { flash('exportMsg', 'Download blocked here. Copy the text instead.'); }
+  });
+  $('shareBtn').addEventListener('click', async () => {
+    try {
+      const file = new File([backupText()], backupName(), { type: 'application/json' });
+      await navigator.share({ files: [file], title: 'Catch-Up Timer backup' });
+    } catch (e) { /* user cancelled */ }
+  });
+  $('copyBtn').addEventListener('click', async () => {
+    const ta = $('exportText');
+    try { await navigator.clipboard.writeText(ta.value); flash('exportMsg', 'Copied to clipboard.'); }
+    catch (e) { ta.focus(); ta.select(); flash('exportMsg', 'Text selected. Use your phone’s Copy.'); }
+  });
+  $('importFile').addEventListener('change', async () => {
+    const f = $('importFile').files[0]; if (!f) return;
+    try { $('importText').value = await f.text(); $('importErr').hidden = true; flash('importMsg', `Loaded ${f.name}. Now choose Merge or Replace.`); }
+    catch (e) { flash('importErr', 'Could not read that file.'); }
+  });
+
+  function readImport() {
+    $('importErr').hidden = true; $('importMsg').hidden = true;
+    const text = $('importText').value.trim();
+    if (!text) { flash('importErr', 'Choose a backup file or paste the backup text first.'); return null; }
+    try {
+      const r = parseBackup(text);
+      if (!r.people.length) { flash('importErr', 'That backup has no valid people in it.'); return null; }
+      return r;
+    } catch (e) { flash('importErr', e instanceof SyntaxError ? 'That isn’t valid backup text. Check you copied all of it.' : e.message); return null; }
+  }
+  const skippedNote = (n) => n ? ` (${n} invalid entr${n === 1 ? 'y' : 'ies'} skipped)` : '';
+
+  $('mergeBtn').addEventListener('click', () => {
+    const r = readImport(); if (!r) return;
+    let added = 0, updated = 0;
+    for (const inc of r.people) {
+      const cur = find(inc.id);
+      if (!cur) { people.push(inc); added++; continue; }
+      const hist = [...new Set([...cur.history, ...inc.history])].sort((a, b) => b - a).slice(0, HISTORY_MAX);
+      const newer = inc.lastCaughtUp > cur.lastCaughtUp ? inc : cur;
+      Object.assign(cur, { name: newer.name, intervalDays: newer.intervalDays, note: newer.note, lastCaughtUp: Math.max(cur.lastCaughtUp, inc.lastCaughtUp), history: hist });
+      updated++;
+    }
+    save(); render();
+    $('exportText').value = backupText();
+    flash('importMsg', `Merged: ${added} added, ${updated} updated${skippedNote(r.skipped)}.`);
+  });
+  $('replaceBtn').addEventListener('click', () => {
+    const r = readImport(); if (!r) return;
+    if (!replaceArmed && people.length) return setReplaceArmed(true);
+    setReplaceArmed(false);
+    people = r.people; save(); render();
+    $('exportText').value = backupText();
+    flash('importMsg', `Replaced with ${plural(r.people.length, 'person').replace('persons', 'people')} from the backup${skippedNote(r.skipped)}.`);
+  });
+
+  // ---------- Dialog plumbing ----------
+  for (const d of [dlg, bdlg]) {
+    d.addEventListener('click', (e) => { if (e.target === d || e.target.closest('[data-close]')) d.close(); });
+  }
+  $('addBtn').addEventListener('click', () => openPerson(null));
+
+  // ---------- Keep the countdowns current ----------
+  const refreshIfNewDay = () => { if (dayNum(Date.now()) !== renderedDay) render(); };
+  setInterval(refreshIfNewDay, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+  window.addEventListener('storage', (e) => { if (e.key === STORAGE_KEY) { people = load() || []; render(); } });
+
+  // ---------- Boot ----------
+  const loaded = load();
+  if (loaded === null) { people = examplePeople(); save(); } else { people = loaded; }
+  render();
+
+  // Offline support when hosted with sw.js next to this file. Silently skipped where service workers aren't allowed.
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => {}); });
+  }
+})();
+</script>
+<!-- APP BODY END -->
+</body>
+</html>
