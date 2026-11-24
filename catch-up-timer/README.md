@@ -37,6 +37,6 @@ Stored in `localStorage` under `catchup.v1`, and exported in the same shape:
 
 - All times are Unix epoch milliseconds (UTC). Kotlin: `Instant.ofEpochMilli(x)`.
 - `history` is newest first, max 30 entries, one per calendar day.
-- Import also accepts ISO-8601 strings for any timestamp, or a bare array of people.
+- Import also accepts ISO-8601 strings for any timestamp, a bare array of people, and `lastContact` in place of `lastCaughtUp` (backups from the other Catch-Up version).
 - Days elapsed = difference between the local calendar dates of `lastCaughtUp` and today, so DST and time zones never shift a count.
 - Status: overdue when days left < 0; due soon when days left ≤ 20% of the interval (min 1, max 7); otherwise fine.

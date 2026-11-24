@@ -343,7 +343,7 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
     if (!raw || typeof raw !== 'object') return null;
     const name = String(raw.name ?? '').trim().slice(0, 60);
     const intervalDays = Math.round(Number(raw.intervalDays));
-    const last = toMs(raw.lastCaughtUp);
+    const last = toMs(raw.lastCaughtUp ?? raw.lastContact); // lastContact: older Catch-Up version
     if (!name || !(intervalDays >= 1 && intervalDays <= 3650) || last == null) return null;
     const history = (Array.isArray(raw.history) ? raw.history : []).map(toMs).filter((x) => x != null);
     if (!history.includes(last)) history.push(last);
