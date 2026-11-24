@@ -70,6 +70,11 @@ header.top .wrap { display: flex; align-items: center; gap: 12px; padding-block:
   display: grid; place-items: center;
 }
 .icon-btn svg { width: 22px; height: 22px; }
+.install-btn {
+  flex: none; display: inline-flex; align-items: center; gap: 6px; height: 48px; padding: 0 16px; border-radius: 14px; border: 0;
+  background: var(--accent); color: var(--accent-fg); font-weight: 800;
+}
+.install-btn svg { width: 20px; height: 20px; }
 
 main .wrap { display: flex; flex-direction: column; gap: 12px; padding-block: 6px 120px; }
 
@@ -188,6 +193,10 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
       <h1>Catch-Up Timer</h1>
       <p class="summary" id="summary" aria-live="polite"></p>
     </div>
+    <button class="install-btn" id="installBtn" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M12 7v7m-3-3 3 3 3-3"/></svg>
+      Install
+    </button>
     <button class="icon-btn" id="backupBtn" aria-label="Back up or restore">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
     </button>
@@ -396,6 +405,9 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>';
   let renderedDay = dayNum(Date.now());
+  const HINT_KEY = 'catchup.hintDone';
+  let hintDone = false;
+  try { hintDone = localStorage.getItem(HINT_KEY) === '1'; } catch (e) {}
 
   function render() {
     const now = Date.now();
@@ -429,7 +441,7 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
           <span class="bar" aria-hidden="true"><span style="width:${Math.max(4, Math.round(s.progress * 100))}%"></span></span>
           <span class="meta">Last caught up ${ago} · ${intervalLabel(p.intervalDays)}</span>
           ${p.note ? `<span class="note">${esc(p.note)}</span>` : ''}
-          ${s.elapsed === 0 ? '' : `<span class="hint">Tap the card when you catch up</span>`}
+          ${s.elapsed === 0 || hintDone ? '' : `<span class="hint">Tap the card when you catch up</span>`}
         </button>
         <button class="edit" data-act="edit" aria-label="Edit ${esc(p.name)}">${EDIT_SVG}</button>
       </article>`;
@@ -456,6 +468,7 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
   const find = (id) => people.find((p) => p.id === id);
   function markCaught(id) {
     const p = find(id); if (!p) return;
+    if (!hintDone) { hintDone = true; try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {} }
     const before = JSON.parse(JSON.stringify(p));
     const now = Date.now();
     p.lastCaughtUp = now;
@@ -674,10 +687,29 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
   document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
   window.addEventListener('storage', (e) => { if (e.key === STORAGE_KEY) { people = load() || []; render(); } });
 
+  // ---------- One-tap install (Chrome offers this once the hosted app qualifies) ----------
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; $('installBtn').hidden = false; });
+  $('installBtn').addEventListener('click', async () => {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    try { await installPrompt.userChoice; } catch (e) {}
+    installPrompt = null; $('installBtn').hidden = true;
+  });
+  window.addEventListener('appinstalled', () => { $('installBtn').hidden = true; showToast('Installed. It’s on your home screen now.'); });
+
   // ---------- Boot ----------
   const loaded = load();
   if (loaded === null) { people = examplePeople(); save(); } else { people = loaded; }
   render();
+
+  // Long-press the app icon → "Add person" opens straight into the add sheet.
+  try {
+    if (new URLSearchParams(location.search).has('add')) {
+      history.replaceState(null, '', location.pathname);
+      openPerson(null);
+    }
+  } catch (e) {}
 
   // Offline support when hosted with sw.js next to this file. Silently skipped where service workers aren't allowed.
   if ('serviceWorker' in navigator && location.protocol === 'https:') {
