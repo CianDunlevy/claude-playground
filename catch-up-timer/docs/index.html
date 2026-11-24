@@ -500,7 +500,7 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
   $('fInterval').addEventListener('input', syncChips);
   $('lastChips').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-ago]'); if (!b) return;
-    const iv = Math.max(1, Math.round(Number($('fInterval').value)) || 14);
+    const iv = Math.max(1, Math.round(Number($('fInterval').value)) || 7);
     const ago = b.dataset.ago === 'due' ? iv : Number(b.dataset.ago);
     $('fLast').value = toDateInput(daysAgoMs(ago));
   });
@@ -517,7 +517,7 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
     const p = id ? find(id) : null;
     $('personTitle').textContent = p ? `Edit ${p.name}` : 'Add person';
     $('fName').value = p ? p.name : '';
-    $('fInterval').value = p ? p.intervalDays : 14;
+    $('fInterval').value = p ? p.intervalDays : 7;
     $('fLast').value = toDateInput(p ? p.lastCaughtUp : Date.now());
     $('fLast').max = toDateInput(Date.now());
     $('fNote').value = p ? p.note : '';
