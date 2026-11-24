@@ -2,15 +2,17 @@
 
 A small offline web app (PWA) that reminds you to call or see the people in your life.
 
-- `docs/index.html`: the whole app (HTML, CSS, JS in one file, no libraries, no network calls)
-- `docs/manifest.webmanifest`, `docs/sw.js`, `docs/icons/`: the extra files that make it installable and work offline
-- `tools/build-artifact.py`: produces the single-file artifact version from `docs/index.html`
+- `app/index.html`: the whole app (HTML, CSS, JS in one file, no libraries, no network calls)
+- `app/manifest.webmanifest`, `app/sw.js`, `app/icons/`: the extra files that make it installable and work offline
+- `tools/build-artifact.py`: produces the single-file artifact version from `app/index.html`
 
 ## Hosting on GitHub Pages
 
-Repo Settings → Pages → Source: "Deploy from a branch" → pick the branch and the `/docs` folder → Save.
-The app appears at `https://<user>.github.io/<repo>/` after a minute. Open that URL in Chrome on Android and choose
-"Add to home screen" / "Install app". When you change files, bump `CACHE` in `sw.js`.
+Repo Settings → Pages → Source: "Deploy from a branch" → pick the branch and `/ (root)` → Save.
+The app appears at `https://<user>.github.io/claude-playground/catch-up-timer/app/` after a minute. Open that URL in
+Chrome on Android and choose "Add to home screen" / "Install app". When you change files, bump `CACHE` in `app/sw.js`.
+
+Build the single-file artifact version with `python3 tools/build-artifact.py out.html`.
 
 ## Data format (version 1)
 
