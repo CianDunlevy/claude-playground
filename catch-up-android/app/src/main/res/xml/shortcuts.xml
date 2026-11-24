@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="add_person"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_add"
+        android:shortcutShortLabel="@string/shortcut_add"
+        android:shortcutLongLabel="@string/shortcut_add">
+        <intent
+            android:action="io.github.ciandunlevy.catchup.ADD"
+            android:targetPackage="io.github.ciandunlevy.catchup"
+            android:targetClass="io.github.ciandunlevy.catchup.ui.MainActivity" />
+    </shortcut>
+</shortcuts>

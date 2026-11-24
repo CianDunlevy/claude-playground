@@ -364,6 +364,11 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
       history: [...new Set(history)].slice(0, HISTORY_MAX),
       createdAt: toMs(raw.createdAt) ?? last,
     };
+    // Phone numbers come from the Android app; kept so backups round-trip without losing them.
+    if (Array.isArray(raw.phones)) {
+      const phones = raw.phones.map((x) => String(x).trim()).filter(Boolean).slice(0, 10);
+      if (phones.length) p.phones = phones;
+    }
     if (raw.example === true) p.example = true;
     return p;
   }
@@ -388,8 +393,8 @@ textarea.mono { font-family: ui-monospace, "Roboto Mono", Menlo, monospace; font
   function exportObject() {
     return {
       format: FORMAT, version: VERSION, exportedAt: new Date().toISOString(),
-      people: people.map(({ id, name, intervalDays, note, lastCaughtUp, history, createdAt, example }) =>
-        Object.assign({ id, name, intervalDays, note, lastCaughtUp, history, createdAt }, example ? { example: true } : {})),
+      people: people.map(({ id, name, intervalDays, note, lastCaughtUp, history, createdAt, example, phones }) =>
+        Object.assign({ id, name, intervalDays, note, lastCaughtUp, history, createdAt }, phones ? { phones } : {}, example ? { example: true } : {})),
     };
   }
   function examplePeople() {

@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Catch-Up</string>
+    <string name="shortcut_add">Add person</string>
+    <string name="widget_description">Who\'s due. Tap a name when you catch up.</string>
+</resources>

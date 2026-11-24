@@ -1,0 +1,40 @@
+name: Catch-Up Android
+
+on:
+  push:
+    paths:
+      - "catch-up-android/**"
+      - ".github/workflows/catch-up-android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: catch-up-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Test and build
+        run: ./gradlew --no-daemon testDebugUnitTest assembleRelease
+      - name: Rename APK
+        run: cp app/build/outputs/apk/release/app-release.apk CatchUp.apk
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ github.run_number }}
+          name: Catch-Up for Android (build ${{ github.run_number }})
+          target_commitish: ${{ github.sha }}
+          make_latest: "true"
+          files: catch-up-android/CatchUp.apk
+          body: |
+            Open this page on your phone and tap **CatchUp.apk** to download, then open it to install or update.
+            Always-latest link: https://github.com/${{ github.repository }}/releases/latest/download/CatchUp.apk
