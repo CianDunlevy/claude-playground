@@ -185,6 +185,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                 if (autoApps && listenerOn && lastCall.isNotBlank()) {
                     Text("Last call seen: $lastCall", fontSize = 13.sp, color = p.muted)
                 }
+                if (autoApps && listenerOn) {
+                    var showLog by remember { mutableStateOf(false) }
+                    val callLog = remember(tick, showLog) { Prefs.callLog }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { showLog = !showLog }) { Text(if (showLog) "Hide detection log" else "Show detection log") }
+                        if (showLog && callLog.isNotEmpty()) TextButton(onClick = {
+                            val cm = ctx.getSystemService(ClipboardManager::class.java)
+                            cm?.setPrimaryClip(android.content.ClipData.newPlainText("Catch-Up detection log", callLog.joinToString("\n")))
+                        }) { Text("Copy log") }
+                    }
+                    if (showLog) Text(
+                        if (callLog.isEmpty()) "Nothing yet. Make a call on WhatsApp, Messenger or Instagram."
+                        else callLog.joinToString("\n"),
+                        fontSize = 12.sp, color = p.muted, lineHeight = 16.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    )
+                }
                 SectionLabel("Count calls longer than")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(60, 180, 300, 600).forEach { s ->

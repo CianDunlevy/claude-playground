@@ -4,18 +4,23 @@ import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.os.BundleCompat
 import io.github.ciandunlevy.catchup.data.Prefs
 import io.github.ciandunlevy.catchup.data.Store
+import io.github.ciandunlevy.catchup.model.CallTracker
 import io.github.ciandunlevy.catchup.model.Logic
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 
 /**
- * Watches WhatsApp, Messenger and Instagram for their "call in progress" notification. When that
- * notification goes away the call has ended: if it lasted long enough and the caller's name matches
- * someone, their catch-up is logged. Nothing else is read, kept or sent anywhere.
+ * Watches WhatsApp, Messenger and Instagram for their "call in progress" notification and times the call
+ * itself (see [CallTracker]). When a call ends, if it lasted at least the minimum and the caller's name
+ * matches someone, their catch-up is logged. Every other notification is ignored straight away.
  */
 class CallNotificationListener : NotificationListenerService() {
 
@@ -27,17 +32,21 @@ class CallNotificationListener : NotificationListenerService() {
             "com.facebook.mlite" to "Messenger",
             "com.instagram.android" to "Instagram",
         )
-        private const val MAX_CALL_MS = 12L * 60 * 60 * 1000
+        private const val GRACE_MS = 8_000L
 
         fun isEnabled(ctx: Context) = NotificationManagerCompat.getEnabledListenerPackages(ctx).contains(ctx.packageName)
-
         fun component(ctx: Context) = ComponentName(ctx, CallNotificationListener::class.java)
 
-        /** Calls currently in progress, by notification key. */
-        private val active = mutableMapOf<String, ActiveCall>()
+        private val tracker = CallTracker(GRACE_MS)
+        private val time = DateTimeFormatter.ofPattern("HH:mm:ss")
+
+        /** Adds a line to the short detection log shown in Settings (last 30 lines, call notifications only). */
+        fun log(line: String) {
+            Prefs.callLog = (listOf("${LocalTime.now().format(time)} $line") + Prefs.callLog).take(30)
+        }
     }
 
-    private data class ActiveCall(val app: String, val name: String, val number: String?, val start: Long)
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onListenerConnected() {
         // Pick up a call that was already going when the service (re)started.
@@ -53,7 +62,20 @@ class CallNotificationListener : NotificationListenerService() {
         val showsTimer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false)
         val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString() ?: ""
         val ongoing = (n.flags and Notification.FLAG_ONGOING_EVENT) != 0
-        if (!Logic.isOngoingCall(n.category, ongoing, callType, showsTimer, text)) return
+        val isCall = Logic.isOngoingCall(n.category, ongoing, callType, showsTimer, text)
+        val tracked = tracker.isTracking(sbn.key)
+
+        // Only call-related notifications are looked at further or logged; messages are ignored.
+        if (!isCall) {
+            if (tracked) {
+                log("$app call notification changed to not-a-call (type=$callType timer=${yes(showsTimer)} ongoing=${yes(ongoing)} \"$text\")")
+                tracker.removed(sbn.key, System.currentTimeMillis())
+                scheduleCheck()
+            } else if (n.category == Notification.CATEGORY_CALL || callType != 0) {
+                log("$app call notification ignored (type=$callType timer=${yes(showsTimer)} ongoing=${yes(ongoing)} \"$text\")")
+            }
+            return
+        }
 
         var name: String? = null
         var number: String? = null
@@ -67,27 +89,40 @@ class CallNotificationListener : NotificationListenerService() {
             ?: extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.takeIf { it.isNotBlank() }
             ?: return
 
-        val now = System.currentTimeMillis()
-        synchronized(active) {
-            if (active.containsKey(sbn.key)) return
-            // While connected, these apps show a call timer whose start time is the notification's "when".
-            val start = if (showsTimer && n.`when` in (now - MAX_CALL_MS)..now) n.`when` else now
-            active[sbn.key] = ActiveCall(app, who, number, start)
-        }
+        // The call timer appears once the other person answers. (Android's "ongoing call" style is also used
+        // while an outgoing call is still ringing, so it doesn't count as answered on its own.)
+        val connected = showsTimer
+        if (!tracked) log("$app call with $who (type=$callType timer=${yes(showsTimer)} \"$text\")")
+        tracker.posted(sbn.key, app, who, number, connected, System.currentTimeMillis())
         Prefs.lastCallSeen = "$app call with $who in progress"
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
-        if (APPS[sbn.packageName] == null) return
-        val call = synchronized(active) { active.remove(sbn.key) } ?: return
-        val seconds = (System.currentTimeMillis() - call.start) / 1000
-        val person = Logic.personForCall(Store.people.value, call.name, call.number)
-        val long = seconds >= Prefs.minCallSeconds
-        Prefs.lastCallSeen = "${call.app} call with ${call.name} · ${CallScanner.formatDuration(seconds)} · " + when {
-            person == null -> "no match. Add \"${call.name}\" as another name on someone."
-            !long -> "matched ${person.name}, but shorter than your minimum."
-            else -> "logged for ${person.name}."
-        }
-        if (person != null && long) Store.upsert(Logic.logCatchUp(person, call.start))
+        if (APPS[sbn.packageName] == null || !tracker.isTracking(sbn.key)) return
+        tracker.removed(sbn.key, System.currentTimeMillis())
+        scheduleCheck()
     }
+
+    private fun scheduleCheck() {
+        handler.postDelayed({ handleFinished() }, GRACE_MS + 500)
+    }
+
+    private fun handleFinished() {
+        for (call in tracker.finished(System.currentTimeMillis())) {
+            val person = Logic.personForCall(Store.people.value, call.name, call.number)
+            val long = call.seconds >= Prefs.minCallSeconds
+            val outcome = when {
+                person == null -> "no match. Add \"${call.name}\" as another name on someone."
+                !long -> "matched ${person.name}, but shorter than your ${Prefs.minCallSeconds / 60} min minimum."
+                else -> "logged for ${person.name}."
+            }
+            Prefs.lastCallSeen = "${call.app} call with ${call.name} · ${formatSeconds(call.seconds)} · $outcome"
+            log("${call.app} call with ${call.name} ended after ${formatSeconds(call.seconds)}: $outcome")
+            if (person != null && long) Store.upsert(Logic.logCatchUp(person, call.start))
+        }
+    }
+
+    private fun yes(b: Boolean) = if (b) "yes" else "no"
+
+    private fun formatSeconds(s: Long) = if (s < 60) "$s s" else CallScanner.formatDuration(s)
 }

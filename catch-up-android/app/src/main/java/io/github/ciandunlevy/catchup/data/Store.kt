@@ -68,6 +68,11 @@ object Prefs {
         get() = sp.getString("lastCallSeen", "") ?: ""
         set(v) = sp.edit().putString("lastCallSeen", v).apply()
 
+    /** Recent call-notification events (newest first), shown in Settings to help tune detection. */
+    var callLog: List<String>
+        get() = sp.getString("callLog", "")?.split("\n")?.filter { it.isNotBlank() } ?: emptyList()
+        set(v) = sp.edit().putString("callLog", v.joinToString("\n")).apply()
+
     /** People already included in an overdue alert, so the same overdue people don't buzz you twice. */
     var notifiedOverdue: Set<String>
         get() = sp.getStringSet("notifiedOverdue", emptySet()) ?: emptySet()

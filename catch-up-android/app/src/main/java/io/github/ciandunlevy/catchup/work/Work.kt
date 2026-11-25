@@ -23,10 +23,12 @@ object Work {
 
     fun scheduleAll(ctx: Context) {
         val wm = WorkManager.getInstance(ctx)
-        // Hourly backstop for call detection; also keeps the widget's day counts fresh.
+        // Backstop in case a phone call's end was missed, and keeps the widget's day counts fresh.
+        // Calls are normally caught the moment they end, so this only needs to run a few times a day.
+        // Android batches it with other apps' jobs and holds it during Doze.
         wm.enqueueUniquePeriodicWork(
-            SCAN_PERIODIC, ExistingPeriodicWorkPolicy.KEEP,
-            PeriodicWorkRequestBuilder<ScanWorker>(1, TimeUnit.HOURS).build(),
+            SCAN_PERIODIC, ExistingPeriodicWorkPolicy.UPDATE,
+            PeriodicWorkRequestBuilder<ScanWorker>(4, TimeUnit.HOURS).build(),
         )
         scheduleReminder(ctx)
     }
