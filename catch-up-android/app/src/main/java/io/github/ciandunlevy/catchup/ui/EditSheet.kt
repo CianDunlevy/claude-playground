@@ -125,9 +125,14 @@ fun EditSheet(person: Person?, onDismiss: () -> Unit, onMessage: (String) -> Uni
     var note by remember { mutableStateOf(person?.note ?: "") }
     val phones = remember { mutableStateListOf<String>().apply { person?.phones?.let { addAll(it) } } }
     var newPhone by remember { mutableStateOf("") }
+    val aliases = remember { mutableStateListOf<String>().apply { person?.aliases?.let { addAll(it) } } }
+    var newAlias by remember { mutableStateOf("") }
+    // Edits are worked out from the person as they were when the sheet opened, so changing your mind is harmless.
+    val original = remember { person }
     var error by remember { mutableStateOf<String?>(null) }
     var showDate by remember { mutableStateOf(false) }
     var deleteArmed by remember { mutableStateOf(false) }
+    var deleted by remember { mutableStateOf(false) }
     LaunchedEffect(deleteArmed) { if (deleteArmed) { delay(4000); deleteArmed = false } }
 
     val focus = remember { FocusRequester() }
@@ -144,49 +149,84 @@ fun EditSheet(person: Person?, onDismiss: () -> Unit, onMessage: (String) -> Uni
         }
     }
 
-    fun close() { scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() } }
+    fun addAlias(raw: String) {
+        val a = raw.trim().take(60)
+        if (Logic.normalizeName(a).isNotEmpty() && aliases.none { Logic.normalizeName(it) == Logic.normalizeName(a) }) aliases += a
+    }
 
-    fun save() {
+    /** The person as currently edited, or null (with [error] set) if something's missing. */
+    fun build(): Person? {
         val nm = name.trim()
         val iv = interval.toIntOrNull()
-        if (nm.isEmpty()) { error = "Enter a name."; return }
-        if (iv == null || iv !in 1..Logic.MAX_INTERVAL) { error = "Pick how often, between 1 and ${Logic.MAX_INTERVAL} days."; return }
-        if (newPhone.isNotBlank()) { addPhone(newPhone); newPhone = "" }
+        if (nm.isEmpty()) { error = "Enter a name."; return null }
+        if (iv == null || iv !in 1..Logic.MAX_INTERVAL) { error = "Pick how often, between 1 and ${Logic.MAX_INTERVAL} days."; return null }
+        error = null
         val now = System.currentTimeMillis()
         val dateMs = if (lastDate == LocalDate.now()) now
         else lastDate.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val cleanNote = note.trim().take(200)
-        val result = if (person == null) {
-            Person(UUID.randomUUID().toString(), nm, iv, cleanNote, dateMs, listOf(dateMs), now, phones.toList())
-        } else {
-            var updated = person.copy(name = nm, intervalDays = iv, note = cleanNote, phones = phones.toList())
-            if (lastDate != Logic.localDate(person.lastCaughtUp)) {
-                updated = updated.copy(
-                    lastCaughtUp = dateMs,
-                    history = (listOf(dateMs) + updated.history.filter { Logic.localDate(it) != lastDate })
-                        .sortedDescending().take(Logic.HISTORY_MAX),
-                )
-            }
-            updated
+        val base = original ?: return Person(UUID.randomUUID().toString(), nm, iv, cleanNote, dateMs, listOf(dateMs), now, phones.toList(), aliases.toList())
+        var updated = (Store.find(base.id) ?: base).copy(name = nm, intervalDays = iv, note = cleanNote, phones = phones.toList(), aliases = aliases.toList())
+        val origDate = Logic.localDate(base.lastCaughtUp)
+        updated = when {
+            lastDate == origDate -> updated.copy(lastCaughtUp = base.lastCaughtUp, history = base.history)
+            // A later date is a catch-up you forgot to log.
+            lastDate.isAfter(origDate) -> updated.copy(
+                lastCaughtUp = dateMs,
+                history = (listOf(dateMs) + base.history.filter { Logic.localDate(it) != lastDate }).sortedDescending().take(Logic.HISTORY_MAX),
+            )
+            // An earlier date (e.g. "Make due now") just moves the timer back; it isn't a catch-up.
+            else -> updated.copy(lastCaughtUp = dateMs, history = base.history.filter { !Logic.localDate(it).isAfter(lastDate) })
         }
-        Store.upsert(result)
-        if (Prefs.autoPhone && result.phones != person?.phones) Work.scanSoon(ctx)
-        onMessage(if (person == null) "Added $nm" else "Saved")
-        close()
+        return updated
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = p.surface) {
+    /** Edits to an existing person save themselves. */
+    fun persist() {
+        if (original == null || deleted) return
+        val p = build() ?: return
+        if (p == Store.find(p.id)) return
+        val phonesChanged = p.phones != Store.find(p.id)?.phones
+        Store.upsert(p)
+        if (Prefs.autoPhone && phonesChanged) Work.scanSoon(ctx)
+    }
+    if (original != null) {
+        LaunchedEffect(name, interval, lastDate, note, phones.toList(), aliases.toList()) { delay(400); persist() }
+    }
+
+    fun close() {
+        persist()
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    }
+
+    fun addNew() {
+        if (newPhone.isNotBlank()) { addPhone(newPhone); newPhone = "" }
+        if (newAlias.isNotBlank()) { addAlias(newAlias); newAlias = "" }
+        val p = build() ?: return
+        Store.upsert(p)
+        if (Prefs.autoPhone && p.phones.isNotEmpty()) Work.scanSoon(ctx)
+        onMessage("Added ${p.name}")
+        scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+    }
+
+    ModalBottomSheet(onDismissRequest = { persist(); onDismiss() }, sheetState = sheetState, containerColor = p.surface) {
         Column(
             Modifier.fillMaxWidth().imePadding().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            Text(if (person == null) "Add person" else "Edit ${person.name}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(if (original == null) "Add person" else "Edit ${original.name}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    if (original != null) Text("Changes save as you go", fontSize = 13.sp, color = p.muted)
+                }
+                IconButton(onClick = { close() }) { Icon(Icons.Filled.Close, contentDescription = "Close", tint = p.muted) }
+            }
 
             OutlinedTextField(
                 value = name, onValueChange = { name = it.take(60); error = null },
                 label = { Text("Name") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { save() }),
+                keyboardActions = KeyboardActions(onDone = { if (original == null) addNew() else close() }),
                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
             )
 
@@ -217,7 +257,7 @@ fun EditSheet(person: Person?, onDismiss: () -> Unit, onMessage: (String) -> Uni
 
             SectionLabel("Phone numbers")
             Text(
-                if (Prefs.autoPhone) "Calls of ${Prefs.minCallSeconds / 60}+ min with these numbers tick them off automatically."
+                if (Prefs.autoPhone) "Phone calls of ${Prefs.minCallSeconds / 60}+ min with these numbers tick them off automatically."
                 else "Add a number, then turn on call detection in Settings to tick them off automatically.",
                 fontSize = 13.sp, color = p.muted,
             )
@@ -245,6 +285,31 @@ fun EditSheet(person: Person?, onDismiss: () -> Unit, onMessage: (String) -> Uni
                 Text("Pick from contacts", color = p.fg)
             }
 
+            SectionLabel("Other names")
+            Text(
+                "WhatsApp, Messenger and Instagram calls are matched by name. " +
+                    "\"${name.trim().ifEmpty { "Their name" }}\" is used already; add any other name they show up as, like Mary Dunlevy.",
+                fontSize = 13.sp, color = p.muted,
+            )
+            aliases.toList().forEach { a ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(a, modifier = Modifier.weight(1f), fontSize = 16.sp)
+                    IconButton(onClick = { aliases.remove(a) }) { Icon(Icons.Filled.Close, contentDescription = "Remove $a", tint = p.muted) }
+                }
+            }
+            OutlinedTextField(
+                value = newAlias, onValueChange = { newAlias = it.take(60) },
+                label = { Text("Add another name") }, singleLine = true,
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { addAlias(newAlias); newAlias = "" }),
+                trailingIcon = {
+                    if (newAlias.isNotBlank()) IconButton(onClick = { addAlias(newAlias); newAlias = "" }) {
+                        Icon(Icons.Filled.Add, contentDescription = "Add name")
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             OutlinedTextField(
                 value = note, onValueChange = { note = it.take(200) },
                 label = { Text("Note (optional)") }, placeholder = { Text("Ask about the new job") },
@@ -253,10 +318,10 @@ fun EditSheet(person: Person?, onDismiss: () -> Unit, onMessage: (String) -> Uni
 
             error?.let { Text(it, color = p.over, fontSize = 14.sp) }
 
-            Button(
-                onClick = { save() }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp),
+            if (original == null) Button(
+                onClick = { addNew() }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = p.onAccent),
-            ) { Text(if (person == null) "Add person" else "Save changes", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+            ) { Text("Add person", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
 
             if (person != null) {
                 if (person.history.isNotEmpty()) {
@@ -275,7 +340,12 @@ fun EditSheet(person: Person?, onDismiss: () -> Unit, onMessage: (String) -> Uni
                 OutlinedButton(
                     onClick = {
                         if (!deleteArmed) deleteArmed = true
-                        else { Store.delete(person.id); onDeleted(person); close() }
+                        else {
+                            deleted = true
+                            Store.delete(person.id)
+                            onDeleted(person)
+                            scope.launch { sheetState.hide() }.invokeOnCompletion { onDismiss() }
+                        }
                     },
                     modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(14.dp),
                     colors = if (deleteArmed) ButtonDefaults.outlinedButtonColors(containerColor = p.over, contentColor = p.surface)

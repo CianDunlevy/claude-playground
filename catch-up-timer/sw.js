@@ -1,6 +1,6 @@
 // Catch-Up Timer service worker: caches the app shell so it opens offline.
 // Bump CACHE when you change any file so phones pick up the new version.
-const CACHE = 'catchup-v3';
+const CACHE = 'catchup-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png'];
 
 self.addEventListener('install', (e) => {

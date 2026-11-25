@@ -6,7 +6,7 @@ import java.time.Instant
 import java.time.OffsetDateTime
 import java.util.UUID
 
-/** Reads and writes the shared backup format (same as the web app, plus an optional "phones" list). */
+/** Reads and writes the shared backup format (same as the web app, plus optional "phones" and "aliases" lists). */
 object Backup {
     const val FORMAT = "catch-up-timer"
     const val VERSION = 1
@@ -25,6 +25,7 @@ object Backup {
                 put("history", JSONArray(p.history))
                 put("createdAt", p.createdAt)
                 if (p.phones.isNotEmpty()) put("phones", JSONArray(p.phones))
+                if (p.aliases.isNotEmpty()) put("aliases", JSONArray(p.aliases))
             })
         }
         val root = JSONObject().apply {
@@ -77,8 +78,9 @@ object Backup {
         val history = mutableListOf<Long>()
         o.optJSONArray("history")?.let { arr -> for (i in 0 until arr.length()) toMs(arr.opt(i))?.let { history += it } }
         if (last !in history) history += last
-        val phones = mutableListOf<String>()
-        o.optJSONArray("phones")?.let { arr -> for (i in 0 until arr.length()) arr.optString(i).trim().takeIf { it.isNotEmpty() }?.let { phones += it } }
+        fun strings(key: String) = mutableListOf<String>().also { out ->
+            o.optJSONArray(key)?.let { arr -> for (i in 0 until arr.length()) arr.optString(i).trim().takeIf { it.isNotEmpty() }?.let { out += it.take(60) } }
+        }.take(10)
         return Person(
             id = o.optString("id", "").ifBlank { UUID.randomUUID().toString() },
             name = name,
@@ -87,7 +89,8 @@ object Backup {
             lastCaughtUp = last,
             history = history.distinct().sortedDescending().take(Logic.HISTORY_MAX),
             createdAt = toMs(o.opt("createdAt")) ?: last,
-            phones = phones,
+            phones = strings("phones"),
+            aliases = strings("aliases"),
         )
     }
 }

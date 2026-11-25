@@ -40,7 +40,7 @@ class ScreenshotTest {
                 Column(Modifier.fillMaxSize().background(p.bg).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Catch-Up", fontWeight = FontWeight.ExtraBold, fontSize = 24.sp, color = p.fg)
                     Logic.sorted(people, now).forEach {
-                        PersonCard(it, Logic.status(it, now), showHint = true, autoPhone = true, onTap = {}, onEdit = {})
+                        PersonCard(it, Logic.status(it, now), showHint = true, autoLog = true, onTap = {}, onEdit = {})
                     }
                 }
             }

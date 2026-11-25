@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import io.github.ciandunlevy.catchup.model.Backup
 import io.github.ciandunlevy.catchup.model.Person
+import io.github.ciandunlevy.catchup.notify.Notifier
 import io.github.ciandunlevy.catchup.widget.CatchUpWidget
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +35,7 @@ object Store {
         tmp.writeText(Backup.toJson(next, pretty = false))
         tmp.renameTo(file)
         CatchUpWidget.updateAll(app)
+        Notifier.syncOverdue(app, alert = false)
     }
 
     fun upsert(p: Person) = update { list ->
@@ -55,10 +57,21 @@ object Prefs {
         get() = sp.getBoolean("autoPhone", false)
         set(v) = sp.edit().putBoolean("autoPhone", v).apply()
 
-    /** Calls before this moment are logged quietly (no notification) when detection is first turned on. */
-    var autoEnabledAt: Long
-        get() = sp.getLong("autoEnabledAt", 0L)
-        set(v) = sp.edit().putLong("autoEnabledAt", v).apply()
+
+    /** Detect WhatsApp / Messenger / Instagram calls from their notifications. */
+    var autoApps: Boolean
+        get() = sp.getBoolean("autoApps", false)
+        set(v) = sp.edit().putBoolean("autoApps", v).apply()
+
+    /** Plain-language description of the last messaging-app call seen, shown in Settings to help matching. */
+    var lastCallSeen: String
+        get() = sp.getString("lastCallSeen", "") ?: ""
+        set(v) = sp.edit().putString("lastCallSeen", v).apply()
+
+    /** People already included in an overdue alert, so the same overdue people don't buzz you twice. */
+    var notifiedOverdue: Set<String>
+        get() = sp.getStringSet("notifiedOverdue", emptySet()) ?: emptySet()
+        set(v) = sp.edit().putStringSet("notifiedOverdue", v).apply()
 
     var minCallSeconds: Int
         get() = sp.getInt("minCallSeconds", 180)
@@ -80,8 +93,4 @@ object Prefs {
         get() = sp.getBoolean("hintDone", false)
         set(v) = sp.edit().putBoolean("hintDone", v).apply()
 
-    /** Call-log entries you undid, so the scanner never re-applies them. */
-    var ignoredCallIds: Set<String>
-        get() = sp.getStringSet("ignoredCallIds", emptySet()) ?: emptySet()
-        set(v) = sp.edit().putStringSet("ignoredCallIds", v.sortedByDescending { it.toLongOrNull() ?: 0 }.take(300).toSet()).apply()
 }

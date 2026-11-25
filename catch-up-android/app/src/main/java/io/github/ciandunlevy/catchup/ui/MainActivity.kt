@@ -52,6 +52,7 @@ class MainActivity : ComponentActivity() {
         resumeTick.value++
         Work.scanSoon(this)
         CatchUpWidget.updateAll(this)
+        Notifier.syncOverdue(this, alert = false)
     }
 }
 

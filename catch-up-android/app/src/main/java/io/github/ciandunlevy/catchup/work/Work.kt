@@ -10,8 +10,6 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import io.github.ciandunlevy.catchup.calls.CallScanner
 import io.github.ciandunlevy.catchup.data.Prefs
-import io.github.ciandunlevy.catchup.data.Store
-import io.github.ciandunlevy.catchup.model.Logic
 import io.github.ciandunlevy.catchup.notify.Notifier
 import io.github.ciandunlevy.catchup.widget.CatchUpWidget
 import java.time.Duration
@@ -60,6 +58,7 @@ class ScanWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx, 
     override suspend fun doWork(): Result {
         CallScanner.scan(applicationContext)
         CatchUpWidget.updateAll(applicationContext)
+        Notifier.syncOverdue(applicationContext, alert = false)
         return Result.success()
     }
 }
@@ -68,11 +67,7 @@ class ReminderWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         CallScanner.scan(applicationContext)
         CatchUpWidget.updateAll(applicationContext)
-        if (Prefs.remindersOn) {
-            val now = System.currentTimeMillis()
-            val due = Logic.sorted(Store.people.value, now).filter { Logic.status(it, now).left <= 0 }
-            if (due.isNotEmpty()) Notifier.reminder(applicationContext, due, now)
-        }
+        Notifier.syncOverdue(applicationContext, alert = true)
         return Result.success()
     }
 }

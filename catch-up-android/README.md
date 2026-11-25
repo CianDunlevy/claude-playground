@@ -7,18 +7,24 @@ Native version of [Catch-Up Timer](../catch-up-timer/) that can tick people off 
 ## What it does
 
 - Same list as the web app: most overdue first, green / amber / red, tap a card to log a catch-up (with Undo).
-- **Phone calls log automatically.** Add numbers to a person (or pick from contacts). Calls of at least 1/3/5/10 min
-  (your choice) tick them off, and a notification says so with an **Undo** button.
+- **Calls log automatically, silently.** Phone calls with a saved number, and WhatsApp / Messenger / Instagram calls
+  matched by name (plus any "other names" you add), tick the person off once they last at least 1/3/5/10 min.
+- **Edits save as you go.** No Save button when changing someone.
 - **Home-screen widget** with the 4 most urgent people. Tap a name to log a catch-up without opening the app.
-- **Daily reminder** notification at a time you pick, only when someone is due or overdue.
+- **One notification, only while someone is overdue.** It buzzes at most once a day (at a time you pick), only when
+  someone new is overdue, and clears itself when you catch up. So the app icon's dot means "someone's overdue".
 - Long-press the app icon → **Add person**.
-- Backup and import in the same JSON format as the web app (`phones` is an extra optional list).
+- Backup and import in the same JSON format as the web app (`phones` and `aliases` are extra optional lists).
 
-No internet permission: call history and contacts never leave the phone.
+No internet permission: call history, contacts and notifications never leave the phone.
 
-## Next
+## How messaging-app calls are detected
 
-WhatsApp, Messenger and Instagram calls, by reading those apps' "ongoing call" notifications.
+WhatsApp, Messenger and Instagram don't share call history with other apps, so `calls/CallNotificationListener.kt`
+watches for their "call in progress" notification (Android's CallStyle, or older "Ongoing voice call" style). When it
+disappears the call has ended; the duration comes from the call timer. The caller's name is matched to a person by name
+or "other names" (`Logic.personForCall`, unit tested). Settings shows the last call seen and whether it matched, to help
+add the right names. If one of those apps changes its notification, detection may need adjusting.
 
 ## How it's built
 
@@ -29,8 +35,9 @@ Kotlin + Jetpack Compose, no other libraries apart from AndroidX WorkManager.
 | `model/` | People, date maths, phone-number matching, backup format, merge (plain Kotlin, unit tested) |
 | `data/Store.kt` | Saves people as JSON in app storage; settings |
 | `calls/CallScanner.kt` | Reads the last 30 days of the call log; safe to run repeatedly |
-| `work/Work.kt` | Background jobs: scan after each call, hourly backstop, daily reminder |
-| `notify/` | Notifications and the Undo / widget-tap actions |
+| `calls/CallNotificationListener.kt` | WhatsApp / Messenger / Instagram call detection |
+| `work/Work.kt` | Background jobs: scan after each call, hourly backstop, daily overdue check |
+| `notify/` | The overdue notification and widget-tap action |
 | `widget/` | Home-screen widget |
 | `ui/` | Compose screens |
 

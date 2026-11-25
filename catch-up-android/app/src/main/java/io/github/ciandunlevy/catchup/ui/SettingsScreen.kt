@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import io.github.ciandunlevy.catchup.calls.CallNotificationListener
 import io.github.ciandunlevy.catchup.calls.CallScanner
 import io.github.ciandunlevy.catchup.data.Prefs
 import io.github.ciandunlevy.catchup.data.Store
@@ -87,6 +88,9 @@ fun SettingsScreen(onBack: () -> Unit) {
     val tick by MainActivity.resumeTick.collectAsState()
 
     var autoPhone by remember { mutableStateOf(Prefs.autoPhone) }
+    var autoApps by remember { mutableStateOf(Prefs.autoApps) }
+    val listenerOn = remember(tick, autoApps) { CallNotificationListener.isEnabled(ctx) }
+    val lastCall = remember(tick) { Prefs.lastCallSeen }
     var minSec by remember { mutableIntStateOf(Prefs.minCallSeconds) }
     var remindersOn by remember { mutableStateOf(Prefs.remindersOn) }
     var hour by remember { mutableIntStateOf(Prefs.reminderHour) }
@@ -97,7 +101,6 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     fun enablePhone() {
         Prefs.autoPhone = true
-        Prefs.autoEnabledAt = System.currentTimeMillis()
         autoPhone = true
         permDenied = false
         Work.scanSoon(ctx)
@@ -122,6 +125,13 @@ fun SettingsScreen(onBack: () -> Unit) {
     fun openAppSettings() = runCatching {
         ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", ctx.packageName, null)))
     }
+    fun openNotificationAccess() = runCatching {
+        val intent = if (Build.VERSION.SDK_INT >= 30)
+            Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, CallNotificationListener.component(ctx).flattenToString())
+        else Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+        ctx.startActivity(intent)
+    }.recoverCatching { ctx.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
 
     Scaffold(
         containerColor = p.bg,
@@ -140,7 +150,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             Section("Automatic logging") {
                 SwitchRow(
                     title = "Detect phone calls",
-                    subtitle = "Calls of ${minSec / 60}+ min with a saved number tick that person off. You get a notification with Undo.",
+                    subtitle = "Calls of ${minSec / 60}+ min with a saved number tick that person off.",
                     checked = autoPhone && hasCallPerm,
                 ) { on ->
                     if (!on) { Prefs.autoPhone = false; autoPhone = false }
@@ -155,23 +165,49 @@ fun SettingsScreen(onBack: () -> Unit) {
                     Text("Catch-Up needs call log access for this. In Android settings: Permissions → Call logs → Allow.", color = p.over, fontSize = 14.sp)
                     TextButton(onClick = { openAppSettings() }) { Text("Open app settings") }
                 }
+                SwitchRow(
+                    title = "Detect WhatsApp, Messenger & Instagram calls",
+                    subtitle = "Uses those apps' call notifications. Matched by name, so add other names to people if needed.",
+                    checked = autoApps && listenerOn,
+                ) { on ->
+                    autoApps = on
+                    Prefs.autoApps = on
+                    if (on && !listenerOn) openNotificationAccess()
+                }
+                if (autoApps && !listenerOn) {
+                    Text("Turn on notification access for Catch-Up. If Android says it's a restricted setting: open app info, tap ⋮ → Allow restricted settings, then try again.",
+                        color = p.over, fontSize = 14.sp)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = { openNotificationAccess() }) { Text("Notification access") }
+                        TextButton(onClick = { openAppSettings() }) { Text("App info") }
+                    }
+                }
+                if (autoApps && listenerOn && lastCall.isNotBlank()) {
+                    Text("Last call seen: $lastCall", fontSize = 13.sp, color = p.muted)
+                }
                 SectionLabel("Count calls longer than")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(60, 180, 300, 600).forEach { s ->
                         ChoiceChip("${s / 60} min", minSec == s) { minSec = s; Prefs.minCallSeconds = s; Work.scanSoon(ctx) }
                     }
                 }
-                Text("Add phone numbers in each person's edit screen. WhatsApp, Messenger and Instagram calls are coming next.",
+                Text("Add phone numbers and other names in each person's edit screen. Nothing is shown when a call is logged; their card just resets.",
                     fontSize = 13.sp, color = p.muted)
             }
 
-            Section("Daily reminder") {
-                SwitchRow("Remind me who's due", "One notification a day if anyone is due or overdue.", remindersOn) { on ->
+            Section("Overdue alert") {
+                SwitchRow(
+                    "Tell me when someone's overdue",
+                    "Buzzes at most once a day, only when someone new is overdue. It clears itself when you catch up, so the app icon only shows a dot while someone's overdue.",
+                    remindersOn,
+                ) { on ->
                     remindersOn = on
                     Prefs.remindersOn = on
                     Work.scheduleReminder(ctx)
+                    Notifier.syncOverdue(ctx, alert = false)
                     if (on && !Notifier.canNotify(ctx) && Build.VERSION.SDK_INT >= 33) notifPerm.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
+                if (remindersOn) SectionLabel("Check at")
                 if (remindersOn) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     listOf(9, 12, 18, 20).forEach { h ->
                         ChoiceChip("%02d:00".format(h), hour == h) { hour = h; Prefs.reminderHour = h; Work.scheduleReminder(ctx) }
@@ -202,7 +238,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             Section("Privacy") {
-                Text("Everything stays on this phone. Catch-Up has no internet permission, so it can't send your call history or contacts anywhere.",
+                Text("Everything stays on this phone. Catch-Up has no internet permission, so it can't send your call history, contacts or notifications anywhere. It only looks at call notifications from WhatsApp, Messenger and Instagram and ignores everything else.",
                     fontSize = 14.sp, color = p.muted)
             }
 

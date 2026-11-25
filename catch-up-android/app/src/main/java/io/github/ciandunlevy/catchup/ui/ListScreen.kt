@@ -99,6 +99,7 @@ fun ListScreen(onSettings: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     var hintDone by remember { mutableStateOf(Prefs.hintDone) }
     val autoPhone = remember(tick) { Prefs.autoPhone }
+    val autoApps = remember(tick) { Prefs.autoApps }
 
     val sorted = remember(people, now) { Logic.sorted(people, now) }
     val statuses = remember(sorted, now) { sorted.associate { it.id to Logic.status(it, now) } }
@@ -165,7 +166,7 @@ fun ListScreen(onSettings: () -> Unit) {
                         person = person,
                         s = statuses.getValue(person.id),
                         showHint = !hintDone,
-                        autoPhone = autoPhone,
+                        autoLog = autoApps || (autoPhone && person.phones.isNotEmpty()),
                         onTap = { caughtUp(person) },
                         onEdit = { editing = person.id },
                         modifier = Modifier.animateItem(),
@@ -238,7 +239,7 @@ fun EmptyState(pad: PaddingValues, onAdd: () -> Unit, onPaste: () -> Unit) {
 private val shortDate = DateTimeFormatter.ofPattern("d MMM", Locale.getDefault())
 
 @Composable
-fun PersonCard(person: Person, s: Status, showHint: Boolean, autoPhone: Boolean, onTap: () -> Unit, onEdit: () -> Unit, modifier: Modifier = Modifier) {
+fun PersonCard(person: Person, s: Status, showHint: Boolean, autoLog: Boolean, onTap: () -> Unit, onEdit: () -> Unit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val (color, chipBg) = when (s.level) {
         Level.OK -> p.ok to p.okBg
@@ -282,7 +283,7 @@ fun PersonCard(person: Person, s: Status, showHint: Boolean, autoPhone: Boolean,
                     Text(person.note, fontSize = 14.sp, modifier = Modifier.fillMaxWidth()
                         .background(p.surface2, RoundedCornerShape(10.dp)).padding(horizontal = 10.dp, vertical = 6.dp))
                 }
-                if (person.phones.isNotEmpty() && autoPhone) {
+                if (autoLog) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Icon(Icons.Filled.Phone, contentDescription = null, tint = p.muted, modifier = Modifier.size(14.dp))
                         Text("Calls tick this off automatically", fontSize = 12.sp, color = p.muted)

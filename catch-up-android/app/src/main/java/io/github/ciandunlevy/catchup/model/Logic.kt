@@ -18,6 +18,8 @@ data class Person(
     val history: List<Long> = listOf(lastCaughtUp),
     val createdAt: Long = lastCaughtUp,
     val phones: List<String> = emptyList(),
+    /** Other names this person shows up as in WhatsApp / Messenger / Instagram call notifications. */
+    val aliases: List<String> = emptyList(),
 )
 
 enum class Level { OK, SOON, OVER }
@@ -97,6 +99,43 @@ object Logic {
     fun personForNumber(people: List<Person>, number: String): Person? =
         people.firstOrNull { p -> p.phones.any { numbersMatch(it, number) } }
 
+    // ---------- Names (WhatsApp / Messenger / Instagram calls) ----------
+
+    /** Lowercase letters and digits only, single spaces: "Mam ❤️" -> "mam", "Mary-Kate O'Neill" -> "mary kate o neill". */
+    fun normalizeName(raw: String): String =
+        raw.lowercase().map { if (it.isLetterOrDigit()) it else ' ' }.joinToString("").trim().replace(Regex("\\s+"), " ")
+
+    private fun labels(p: Person) = (listOf(p.name) + p.aliases).map { normalizeName(it) }.filter { it.isNotEmpty() }
+
+    /**
+     * Finds who a call notification is about. Exact name or alias match first. Otherwise a first-name style
+     * match ("Dave" vs "Dave Smith"), but only when exactly one person fits, so two Daves never get mixed up.
+     * A phone number in the notification (some apps include one) is tried first.
+     */
+    fun personForCall(people: List<Person>, name: String, number: String? = null): Person? {
+        if (!number.isNullOrBlank()) personForNumber(people, number)?.let { return it }
+        val n = normalizeName(name)
+        if (n.isEmpty()) return null
+        val exact = people.filter { n in labels(it) }
+        if (exact.isNotEmpty()) return exact.singleOrNull()
+        val loose = people.filter { p -> labels(p).any { l -> n.startsWith("$l ") || l.startsWith("$n ") } }
+        return loose.singleOrNull()
+    }
+
+    /**
+     * Decides whether a messaging app's notification is a call in progress (not ringing, not a missed call).
+     * [callType] is Android's CallStyle type: 1 incoming, 2 ongoing, 3 screening, 0 when the app doesn't use CallStyle.
+     */
+    fun isOngoingCall(category: String?, ongoingFlag: Boolean, callType: Int, showsTimer: Boolean, text: String): Boolean {
+        if (callType == 2) return true
+        if (callType == 1 || callType == 3) return false
+        if (!ongoingFlag) return false
+        if (category == "call" && showsTimer) return true
+        val t = text.lowercase()
+        val sounds = Regex("ongoing|in progress|on call|connected").containsMatchIn(t)
+        return sounds && (category == "call" || "call" in t || "video" in t)
+    }
+
     // ---------- Merge ----------
 
     data class MergeResult(val people: List<Person>, val added: Int, val updated: Int)
@@ -118,6 +157,7 @@ object Logic {
                 lastCaughtUp = max(cur.lastCaughtUp, inc.lastCaughtUp),
                 history = (cur.history + inc.history).distinct().sortedDescending().take(HISTORY_MAX),
                 phones = (cur.phones + inc.phones).distinctBy { normalizeNumber(it) },
+                aliases = (cur.aliases + inc.aliases).distinctBy { normalizeName(it) },
             )
             updated++
         }

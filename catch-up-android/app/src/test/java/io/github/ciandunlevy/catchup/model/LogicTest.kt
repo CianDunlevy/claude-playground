@@ -92,4 +92,43 @@ class LogicTest {
         assertEquals("Mam!", r.people[0].name)
         assertEquals(3, r.people[0].history.size)
     }
+
+    @Test fun callNamesMatchPeople() {
+        val people = listOf(
+            Person("m", "Mam", 7, lastCaughtUp = 0, aliases = listOf("Mary Dunlevy")),
+            Person("d", "Dave", 30, lastCaughtUp = 0),
+            Person("a", "Aoife K", 14, lastCaughtUp = 0),
+        )
+        assertEquals("m", Logic.personForCall(people, "Mam ❤️")?.id)
+        assertEquals("m", Logic.personForCall(people, "mary  dunlevy")?.id)
+        assertEquals("d", Logic.personForCall(people, "Dave Smith")?.id)
+        assertEquals("a", Logic.personForCall(people, "Aoife")?.id)
+        assertNull(Logic.personForCall(people, "Davina"))
+        assertNull(Logic.personForCall(people, "Group chat"))
+        // Two Daves: never guess.
+        val twoDaves = listOf(Person("d1", "Dave Smith", 30, lastCaughtUp = 0), Person("d2", "Dave Murphy", 30, lastCaughtUp = 0))
+        assertNull(Logic.personForCall(twoDaves, "Dave"))
+        assertEquals("d2", Logic.personForCall(twoDaves, "Dave Murphy")?.id)
+        // A number in the notification wins.
+        val withPhone = listOf(Person("p", "Sam", 7, lastCaughtUp = 0, phones = listOf("0871234567")))
+        assertEquals("p", Logic.personForCall(withPhone, "Unknown", "+353871234567")?.id)
+    }
+
+    @Test fun recognisesOngoingCallsOnly() {
+        // CallStyle (Android 12+): 2 = ongoing, 1 = ringing.
+        assertTrue(Logic.isOngoingCall("call", true, 2, true, ""))
+        assertFalse(Logic.isOngoingCall("call", true, 1, false, "Incoming voice call"))
+        // Older style notifications.
+        assertTrue(Logic.isOngoingCall("call", true, 0, true, "00:42"))
+        assertTrue(Logic.isOngoingCall(null, true, 0, false, "Ongoing voice call"))
+        assertTrue(Logic.isOngoingCall("call", true, 0, false, "Ongoing video call"))
+        assertFalse(Logic.isOngoingCall("call", false, 0, false, "Missed voice call"))
+        assertFalse(Logic.isOngoingCall("msg", true, 0, false, "Connected to WhatsApp Web"))
+        assertFalse(Logic.isOngoingCall("msg", false, 0, false, "Hey, are you on a call?"))
+    }
+
+    @Test fun aliasesRoundTrip() {
+        val p = Person("x", "Mam", 7, lastCaughtUp = 5, aliases = listOf("Mary Dunlevy"))
+        assertEquals(p, Backup.parse(Backup.toJson(listOf(p))).people.single())
+    }
 }
