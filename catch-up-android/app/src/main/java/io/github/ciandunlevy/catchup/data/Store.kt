@@ -58,7 +58,7 @@ object Prefs {
         set(v) = sp.edit().putBoolean("autoPhone", v).apply()
 
 
-    /** Detect WhatsApp / Messenger / Instagram calls from their notifications. */
+    /** Detect WhatsApp / Messenger / Instagram / Google Chat calls from their notifications. */
     var autoApps: Boolean
         get() = sp.getBoolean("autoApps", false)
         set(v) = sp.edit().putBoolean("autoApps", v).apply()

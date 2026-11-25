@@ -18,7 +18,7 @@ import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 
 /**
- * Watches WhatsApp, Messenger and Instagram for their "call in progress" notification and times the call
+ * Watches WhatsApp, Messenger, Instagram and Google Chat / Meet for their "call in progress" notification and times the call
  * itself (see [CallTracker]). When a call ends, if it lasted at least the minimum and the caller's name
  * matches someone, their catch-up is logged. Every other notification is ignored straight away.
  */
@@ -31,6 +31,11 @@ class CallNotificationListener : NotificationListenerService() {
             "com.facebook.orca" to "Messenger",
             "com.facebook.mlite" to "Messenger",
             "com.instagram.android" to "Instagram",
+            // Google Chat calls ring through the Chat app or Gmail; 1:1 Meet calls through the Meet app.
+            "com.google.android.apps.dynamite" to "Google Chat",
+            "com.google.android.gm" to "Google Chat",
+            "com.google.android.apps.tachyon" to "Google Meet",
+            "com.google.android.apps.meetings" to "Google Meet",
         )
         private const val GRACE_MS = 8_000L
 

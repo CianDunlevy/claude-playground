@@ -166,7 +166,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                     TextButton(onClick = { openAppSettings() }) { Text("Open app settings") }
                 }
                 SwitchRow(
-                    title = "Detect WhatsApp, Messenger & Instagram calls",
+                    title = "Detect WhatsApp, Messenger, Instagram & Google Chat calls",
                     subtitle = "Uses those apps' call notifications. Matched by name, so add other names to people if needed.",
                     checked = autoApps && listenerOn,
                 ) { on ->
@@ -196,7 +196,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                         }) { Text("Copy log") }
                     }
                     if (showLog) Text(
-                        if (callLog.isEmpty()) "Nothing yet. Make a call on WhatsApp, Messenger or Instagram."
+                        if (callLog.isEmpty()) "Nothing yet. Make a call on WhatsApp, Messenger, Instagram or Google Chat."
                         else callLog.joinToString("\n"),
                         fontSize = 12.sp, color = p.muted, lineHeight = 16.sp,
                         fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
@@ -255,7 +255,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             }
 
             Section("Privacy") {
-                Text("Everything stays on this phone. Catch-Up has no internet permission, so it can't send your call history, contacts or notifications anywhere. It only looks at call notifications from WhatsApp, Messenger and Instagram and ignores everything else.",
+                Text("Everything stays on this phone. Catch-Up has no internet permission, so it can't send your call history, contacts or notifications anywhere. It only looks at call notifications from WhatsApp, Messenger, Instagram and Google Chat / Meet and ignores everything else.",
                     fontSize = 14.sp, color = p.muted)
             }
 

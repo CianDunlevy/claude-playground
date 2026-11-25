@@ -7,7 +7,7 @@ Native version of [Catch-Up Timer](../catch-up-timer/) that can tick people off 
 ## What it does
 
 - Same list as the web app: most overdue first, green / amber / red, tap a card to log a catch-up (with Undo).
-- **Calls log automatically, silently.** Phone calls with a saved number, and WhatsApp / Messenger / Instagram calls
+- **Calls log automatically, silently.** Phone calls with a saved number, and WhatsApp / Messenger / Instagram / Google Chat calls
   matched by name (plus any "other names" you add), tick the person off once they last at least 1/3/5/10 min.
 - **Edits save as you go.** No Save button when changing someone.
 - **Home-screen widget** with the 4 most urgent people. Tap a name to log a catch-up without opening the app.
@@ -20,7 +20,7 @@ No internet permission: call history, contacts and notifications never leave the
 
 ## How messaging-app calls are detected
 
-WhatsApp, Messenger and Instagram don't share call history with other apps, so `calls/CallNotificationListener.kt`
+WhatsApp, Messenger, Instagram and Google Chat / Meet don't share call history with other apps, so `calls/CallNotificationListener.kt`
 watches for their "call in progress" notification (Android's CallStyle, or older "Ongoing voice call" style). When it
 disappears the call has ended; the duration comes from the call timer. The caller's name is matched to a person by name
 or "other names" (`Logic.personForCall`, unit tested). Settings shows the last call seen and whether it matched, to help
@@ -35,7 +35,7 @@ Kotlin + Jetpack Compose, no other libraries apart from AndroidX WorkManager.
 | `model/` | People, date maths, phone-number matching, backup format, merge (plain Kotlin, unit tested) |
 | `data/Store.kt` | Saves people as JSON in app storage; settings |
 | `calls/CallScanner.kt` | Reads the last 30 days of the call log; safe to run repeatedly |
-| `calls/CallNotificationListener.kt` | WhatsApp / Messenger / Instagram call detection |
+| `calls/CallNotificationListener.kt` | WhatsApp / Messenger / Instagram / Google Chat call detection |
 | `work/Work.kt` | Background jobs: scan after each call, hourly backstop, daily overdue check |
 | `notify/` | The overdue notification and widget-tap action |
 | `widget/` | Home-screen widget |

@@ -36,7 +36,7 @@
 
         <receiver android:name=".notify.ActionReceiver" android:exported="false" />
 
-        <!-- Reads WhatsApp / Messenger / Instagram call notifications only (filtered in code). Off until you grant notification access. -->
+        <!-- Reads WhatsApp / Messenger / Instagram / Google Chat call notifications only (filtered in code). Off until you grant notification access. -->
         <service
             android:name=".calls.CallNotificationListener"
             android:exported="true"

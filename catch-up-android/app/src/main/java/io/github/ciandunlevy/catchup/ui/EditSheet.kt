@@ -287,7 +287,7 @@ fun EditSheet(person: Person?, onDismiss: () -> Unit, onMessage: (String) -> Uni
 
             SectionLabel("Other names")
             Text(
-                "WhatsApp, Messenger and Instagram calls are matched by name. " +
+                "WhatsApp, Messenger, Instagram and Google Chat calls are matched by name. " +
                     "\"${name.trim().ifEmpty { "Their name" }}\" is used already; add any other name they show up as, like Mary Dunlevy.",
                 fontSize = 13.sp, color = p.muted,
             )

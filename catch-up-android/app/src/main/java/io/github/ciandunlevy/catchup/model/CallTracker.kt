@@ -1,7 +1,7 @@
 package io.github.ciandunlevy.catchup.model
 
 /**
- * Works out how long a WhatsApp / Messenger / Instagram call lasted from its notifications, using our own clock.
+ * Works out how long a WhatsApp / Messenger / Instagram / Google Chat call lasted from its notifications, using our own clock.
  * The apps' own timestamps aren't trusted, and apps often swap notifications mid-call (ringing → connected),
  * so a call is tracked by app + caller name across notifications, and only counts as ended once none of its
  * notifications have been showing for [graceMs].

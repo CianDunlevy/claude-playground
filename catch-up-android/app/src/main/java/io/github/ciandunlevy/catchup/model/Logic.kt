@@ -18,7 +18,7 @@ data class Person(
     val history: List<Long> = listOf(lastCaughtUp),
     val createdAt: Long = lastCaughtUp,
     val phones: List<String> = emptyList(),
-    /** Other names this person shows up as in WhatsApp / Messenger / Instagram call notifications. */
+    /** Other names this person shows up as in WhatsApp / Messenger / Instagram / Google Chat call notifications. */
     val aliases: List<String> = emptyList(),
 )
 
@@ -99,7 +99,7 @@ object Logic {
     fun personForNumber(people: List<Person>, number: String): Person? =
         people.firstOrNull { p -> p.phones.any { numbersMatch(it, number) } }
 
-    // ---------- Names (WhatsApp / Messenger / Instagram calls) ----------
+    // ---------- Names (WhatsApp / Messenger / Instagram / Google Chat calls) ----------
 
     /** Lowercase letters and digits only, single spaces: "Mam ❤️" -> "mam", "Mary-Kate O'Neill" -> "mary kate o neill". */
     fun normalizeName(raw: String): String =
